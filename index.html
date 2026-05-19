@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pastelômetro CCT - Distribuição Normal</title>
+    <!-- Chart.js para o gráfico estatístico -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -17,12 +18,12 @@
             align-items: center;
         }
         .container {
-            max-width: 600px;
+            max-width: 650px;
             width: 100%;
             text-align: center;
         }
         h1 { color: #ff9800; margin-bottom: 5px; }
-        p.subtitle { color: #888; margin-top: 0; font-size: 0.9em; }
+        p.subtitle { color: #888; margin-top: 0; font-size: 0.9em; margin-bottom: 25px; }
         
         .btn-pastel {
             background-color: #ff9800;
@@ -35,41 +36,55 @@
             cursor: pointer;
             box-shadow: 0 4px 15px rgba(255, 152, 0, 0.4);
             transition: transform 0.2s, background-color 0.2s;
-            margin: 20px 0;
+            margin: 10px 0 25px 0;
             width: 100%;
         }
         .btn-pastel:hover { background-color: #e65100; }
         .btn-pastel:active { transform: scale(0.98); }
+        .btn-pastel:disabled { background-color: #555; cursor: not-allowed; box-shadow: none; }
         
         .stats-box {
             background-color: #1e1e1e;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
             border: 1px solid #333;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
         .stats-grid {
-            display: flex;
-            justify-content: space-around;
-            margin-top: 10px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
         }
-        .stat-val { font-size: 1.2em; font-weight: bold; color: #ffb74d; }
+        .stat-card {
+            background-color: #252525;
+            padding: 15px 10px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .stat-label { color: #aaa; font-size: 0.85em; margin-bottom: 5px; }
+        .stat-val { font-size: 1.3em; font-weight: bold; color: #ffb74d; }
+        
         .chart-container {
             position: relative;
             width: 100%;
             background-color: #1e1e1e;
-            border-radius: 10px;
-            padding: 10px;
+            border-radius: 12px;
+            padding: 15px;
             box-sizing: border-box;
             border: 1px solid #333;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
-        #loading { color: #ff9800; display: none; margin-top: 10px; }
+        #loading { color: #ff9800; display: none; margin-top: -15px; margin-bottom: 20px; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>🥐 Pastelômetro Normal</h1>
+    <h1>🥐 Pastelômetro CCT</h1>
     <p class="subtitle">Análise Preditiva de Salgados da Cantina</p>
 
     <button class="btn-pastel" onclick="registrarPastel()">Pastel Pronto! 🔔</button>
@@ -77,16 +92,28 @@
 
     <div class="stats-box">
         <div class="stats-grid">
-            <div>
-                <div>Média (<span style="font-family: serif;">μ</span>)</div>
+            <div class="stat-card">
+                <div class="stat-label">Média (<span style="font-family: serif; font-size: 1.2em;">μ</span>)</div>
                 <div id="val-mu" class="stat-val">--:--</div>
             </div>
-            <div>
-                <div>Desvio Padrão (<span style="font-family: serif;">σ</span>)</div>
+            <div class="stat-card">
+                <div class="stat-label">Mediana</div>
+                <div id="val-mediana" class="stat-val">--:--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Moda</div>
+                <div id="val-moda" class="stat-val">--:--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">DP Pop. (<span style="font-family: serif; font-size: 1.2em;">σ</span>)</div>
                 <div id="val-sigma" class="stat-val">- min</div>
             </div>
-            <div>
-                <div>Amostras (n)</div>
+            <div class="stat-card">
+                <div class="stat-label">DP Amostra (<span style="font-family: serif; font-size: 1.2em;">s</span>)</div>
+                <div id="val-s" class="stat-val">- min</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Amostras (n)</div>
                 <div id="val-total" class="stat-val">0</div>
             </div>
         </div>
@@ -98,17 +125,47 @@
 </div>
 
 <script>
-    // ⚠️ SUBSTITUA PELO URL COPIADO DO SEU GOOGLE APPS SCRIPT
     const API_URL = "https://script.google.com/macros/s/AKfycbwQEP1QPSZ5SrKzPRqw5k-yDI4Junq0_Bx5KUe4Ry94VOjlNslWWx4aB2dEpdRFOBXA/exec";
     
     let chart;
 
     // Converte minutos acumulados do dia de volta para o formato HH:MM
     function minutosParaHora(minutos) {
-        if (!minutos) return "--:--";
+        if (minutos === undefined || minutos === null || isNaN(minutos)) return "--:--";
         let h = Math.floor(minutos / 60);
-        let m = minutos % 60;
+        let m = Math.floor(minutos % 60);
         return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+
+    // Funções Estatísticas Adicionais (Caso o Backend envie a array bruta)
+    function calcularEstatisticas(array) {
+        if (!array || array.length === 0) return null;
+        let n = array.length;
+        
+        let soma = array.reduce((a, b) => a + b, 0);
+        let mu = soma / n;
+
+        let ordenado = [...array].sort((a, b) => a - b);
+        let mediana = n % 2 === 0 
+            ? (ordenado[n/2 - 1] + ordenado[n/2]) / 2 
+            : ordenado[Math.floor(n/2)];
+
+        let freq = {};
+        let maxFreq = 0;
+        array.forEach(v => {
+            freq[v] = (freq[v] || 0) + 1;
+            if (freq[v] > maxFreq) maxFreq = freq[v];
+        });
+        let modas = Object.keys(freq).filter(k => freq[k] === maxFreq).map(Number);
+        let modaStr = modas.map(m => minutosParaHora(m)).join(' e ');
+
+        let varianciaPop = array.reduce((a, b) => a + Math.pow(b - mu, 2), 0) / n;
+        let sigma = Math.sqrt(varianciaPop);
+        
+        let varianciaAmostral = n > 1 ? array.reduce((a, b) => a + Math.pow(b - mu, 2), 0) / (n - 1) : 0;
+        let s = Math.sqrt(varianciaAmostral);
+
+        return { mu, mediana, modaStr, sigma, s, total: n };
     }
 
     // Função matemática da Densidade de Probabilidade da Distribuição Normal
@@ -120,17 +177,21 @@
     // Gera os dados para plotar a curva de Gauss em tempo real
     function gerarPontosCurva(mu, sigma) {
         let pontos = [];
-        if (sigma === 0) sigma = 1; // Prevenção de divisão por zero
+        let sigmaGrafico = (!sigma || sigma === 0) ? 1 : sigma; // Prevenção de divisão por zero
         
-        // Plota de -3 desvios padrões até +3 desvios padrões
-        let inicio = mu - (3 * sigma);
-        let fim = mu + (3 * sigma);
-        let passo = (fim - inicio) / 100;
+        // Assegura que o gráfico mostra pelo menos uma janela de 1 hora para cada lado
+        let margem = Math.max(3 * sigmaGrafico, 60); 
+        
+        let inicio = mu - margem;
+        let fim = mu + margem;
+        
+        // Alta resolução para uma curva muito mais suave
+        let passo = (fim - inicio) / 200;
 
         for (let x = inicio; x <= fim; x += passo) {
             pontos.push({
-                x: Math.round(x),
-                y: funcaoNormal(x, mu, sigma)
+                x: x, 
+                y: funcaoNormal(x, mu, sigmaGrafico)
             });
         }
         return pontos;
@@ -138,46 +199,67 @@
 
     // Atualiza a interface e reconstrói o gráfico
     function atualizarDashboard(data) {
-        document.getElementById('val-mu').innerText = `${minutosParaHora(data.mu)} (${data.mu})`;
-        document.getElementById('val-sigma').innerText = `${data.sigma} min`;
+        if (!data || data.total === 0) return;
+
+        document.getElementById('val-mu').innerText = `${minutosParaHora(data.mu)}`;
+        document.getElementById('val-mediana').innerText = data.mediana ? minutosParaHora(data.mediana) : '--:--';
+        document.getElementById('val-moda').innerText = data.modaStr || '--:--';
+        
+        // Exibindo com 1 casa decimal para maior precisão
+        document.getElementById('val-sigma').innerText = data.sigma ? `${data.sigma.toFixed(1)} min` : '- min';
+        document.getElementById('val-s').innerText = data.s ? `${data.s.toFixed(1)} min` : '- min';
         document.getElementById('val-total').innerText = data.total;
 
         const pontosCurva = gerarPontosCurva(data.mu, data.sigma);
+        const ctx = document.getElementById('gaussChart').getContext('2d');
+
+        let gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(255, 152, 0, 0.6)');
+        gradient.addColorStop(1, 'rgba(255, 152, 0, 0.0)');
 
         if (chart) chart.destroy();
 
-        const ctx = document.getElementById('gaussChart').getContext('2d');
         chart = new Chart(ctx, {
             type: 'line',
             data: {
                 datasets: [{
-                    label: 'f(x) - Probabilidade do Pastel',
+                    label: 'Densidade de Probabilidade',
                     data: pontosCurva,
                     borderColor: '#ff9800',
-                    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+                    backgroundColor: gradient,
+                    borderWidth: 3,
                     fill: true,
                     tension: 0.4,
-                    pointRadius: 0
+                    pointRadius: 0,
+                    pointHoverRadius: 6
                 }]
             },
             options: {
                 responsive: true,
+                interaction: { mode: 'index', intersect: false },
                 scales: {
                     x: {
                         type: 'linear',
-                        title: { display: true, text: 'Tempo (Minutos do Dia)', color: '#aaa' },
+                        title: { display: true, text: 'Horário Previsto', color: '#888', font: { size: 14 } },
                         ticks: {
-                            color: '#888',
+                            color: '#aaa',
+                            maxTicksLimit: 8,
                             callback: function(value) { return minutosParaHora(value); }
                         },
-                        grid: { color: '#333' }
+                        grid: { color: 'rgba(255,255,255,0.05)' }
                     },
-                    y: {
-                        display: false // O formato da curva importa mais que os valores brutos de Y
-                    }
+                    y: { display: false, min: 0 }
                 },
                 plugins: {
-                    legend: { display: false }
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(0,0,0,0.8)',
+                        titleColor: '#ff9800',
+                        callbacks: {
+                            title: function(context) { return 'Hora: ' + minutosParaHora(context[0].parsed.x); },
+                            label: function(context) { return 'Probabilidade relativa: ' + (context[0].parsed.y * 100).toFixed(2) + '%'; }
+                        }
+                    }
                 }
             }
         });
@@ -186,8 +268,13 @@
     // Função para carregar os dados iniciais ao abrir a página
     async function carregarDados() {
         try {
+            // Chamada REAL para a sua API do Google Sheets
             let res = await fetch(`${API_URL}?action=consultar`);
-            let dados = await res.json();
+            let respostaAPI = await res.json(); 
+            
+            // Suporta tanto se a API devolver a array bruta quanto as estatísticas prontas
+            let dados = Array.isArray(respostaAPI) ? calcularEstatisticas(respostaAPI) : respostaAPI;
+            
             atualizarDashboard(dados);
         } catch (err) {
             console.error("Erro ao buscar dados:", err);
@@ -203,12 +290,16 @@
         loading.style.display = 'block';
 
         try {
+            // Chamada REAL para a sua API do Google Sheets
             let res = await fetch(`${API_URL}?action=registrar`);
-            let dados = await res.json();
+            let respostaAPI = await res.json(); 
+            
+            let dados = Array.isArray(respostaAPI) ? calcularEstatisticas(respostaAPI) : respostaAPI;
+            
             atualizarDashboard(dados);
-            alert(`Registrado com sucesso! Novo pico teórico (μ): ${minutosParaHora(dados.mu)}`);
+            alert(`Registado com sucesso! Novo pico teórico (μ): ${minutosParaHora(dados.mu)}`);
         } catch (err) {
-            alert("Erro ao salvar o horário. Verifica a ligação.");
+            alert("Erro ao guardar o horário. Verifique a ligação com o Apps Script.");
         } finally {
             btn.disabled = false;
             loading.style.display = 'none';
