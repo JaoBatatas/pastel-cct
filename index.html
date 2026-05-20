@@ -107,10 +107,92 @@
             border: 1px solid #333;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
-        #loading { color: #ff9800; display: none; margin-top: -15px; margin-bottom: 20px; font-weight: bold; }
+
+        /* TELA DE CARREGAMENTO PREMIUM */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(18, 18, 18, 0.85);
+            backdrop-filter: blur(6px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.3s ease;
+        }
+        .spinner-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            background-color: #1e1e1e;
+            padding: 30px;
+            border-radius: 16px;
+            border: 1px solid #333;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+        .double-spinner {
+            position: relative;
+            width: 60px;
+            height: 60px;
+        }
+        .double-spinner .circle-1, .double-spinner .circle-2 {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: 4px solid transparent;
+            border-radius: 50%;
+        }
+        .double-spinner .circle-1 {
+            border-top-color: #ff9800;
+            border-bottom-color: #ff9800;
+            animation: spin-clockwise 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+            filter: drop-shadow(0 0 8px rgba(255, 152, 0, 0.5));
+        }
+        .double-spinner .circle-2 {
+            border-left-color: #f44336;
+            border-right-color: #f44336;
+            animation: spin-counterclockwise 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+            filter: drop-shadow(0 0 8px rgba(244, 67, 54, 0.5));
+        }
+        .loading-text {
+            color: #ff9800;
+            font-weight: bold;
+            font-size: 1.1em;
+            letter-spacing: 0.5px;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        @keyframes spin-clockwise {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        @keyframes spin-counterclockwise {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(-360deg); }
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 0.7; }
+            50% { opacity: 1; }
+        }
     </style>
 </head>
 <body>
+
+<!-- OVERLAY DE CARREGAMENTO -->
+<div id="loading-overlay" class="loading-overlay">
+    <div class="spinner-box">
+        <div class="double-spinner">
+            <div class="circle-1"></div>
+            <div class="circle-2"></div>
+        </div>
+        <div id="loading-text" class="loading-text">Sincronizando com o banco de dados...</div>
+    </div>
+</div>
 
 <div class="container">
     <h1>🥐 Pastelômetro MP</h1>
@@ -120,8 +202,6 @@
     <div id="status-banner" class="status-banner"></div>
     <button id="btn-pronto" class="btn-acao btn-pronto" onclick="acionarAPI('registrar_pronto')">Pastel Pronto! 🔔</button>
     <button id="btn-acabou" class="btn-acao btn-acabou" onclick="acionarAPI('registrar_acabou')">O Pastel Acabou ❌</button>
-    
-    <div id="loading">Sincronizando com a Cantina...</div>
 
     <!-- ESTATÍSTICAS: PRONTO -->
     <div class="stats-box" id="panel-pronto">
@@ -190,11 +270,24 @@
     let userIp = "0.0.0.0";
     let userUid = "";
 
+    // Exibe o carregamento customizado
+    function mostrarCarregando(mensagem) {
+        const overlay = document.getElementById('loading-overlay');
+        const textElement = document.getElementById('loading-text');
+        if (textElement) textElement.innerText = mensagem || "Sincronizando com o banco de dados...";
+        if (overlay) overlay.style.display = 'flex';
+    }
+
+    // Oculta o carregamento
+    function ocultarCarregando() {
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+
     // Gera um identificador exclusivo para este navegador se ele ainda não existir
     function obterOuCriarUID() {
         let uid = localStorage.getItem('pastel_uid');
         if (!uid) {
-            // Cria uma assinatura única baseada em timestamp e caracteres aleatórios
             uid = 'u_' + Math.random().toString(36).substring(2, 15) + '_' + Date.now();
             localStorage.setItem('pastel_uid', uid);
         }
@@ -281,6 +374,7 @@
         return (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(expoente);
     }
 
+    // Eixo X dinâmico para encaixar ambas as curvas
     function gerarPontosCurva(mu, sigma, overrideInicio, overrideFim) {
         let pontos = [];
         let sigmaGrafico = (!sigma || sigma === 0) ? 1 : sigma; 
@@ -402,14 +496,15 @@
     }
 
     async function carregarDados() {
+        mostrarCarregando("Sincronizando com o banco de dados...");
         try {
-            userUid = obterOuCriarUID(); // Gera ou resgata o ID único persistente
-            await obterIP(); // Obtém o IP do Wi-Fi/Rede atual
+            userUid = obterOuCriarUID(); // Gera/Lê UID persistente
+            await obterIP(); // Obtém o IP da rede
             
             let res = await fetch(`${API_URL}?action=consultar&ip=${userIp}&uid=${userUid}`);
             let respostaAPI = await res.json(); 
 
-            // Bloqueia se o IP ou o UID único estiver na lista negra
+            // Bloqueia em definitivo se o UID ou IP estiver banido
             if (respostaAPI.status === "bloqueado") {
                 document.body.innerHTML = `
                     <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; font-family:sans-serif; text-align:center; padding: 20px;">
@@ -429,20 +524,22 @@
                 statusHoje: "disponivel",
                 horaPronto: "17:23"
             });
+        } finally {
+            ocultarCarregando();
         }
     }
 
     async function acionarAPI(acao) {
+        let msg = acao === "registrar_pronto" ? "Registrando a saída do pastel..." : "Registrando que o pastel acabou...";
+        mostrarCarregando(msg);
+
         const btnPronto = document.getElementById('btn-pronto');
         const btnAcabou = document.getElementById('btn-acabou');
-        const loading = document.getElementById('loading');
         
         if (btnPronto) btnPronto.disabled = true;
         if (btnAcabou) btnAcabou.disabled = true;
-        loading.style.display = 'block';
 
         try {
-            // Passa o IP e o identificador único na chamada da ação
             let res = await fetch(`${API_URL}?action=${acao}&ip=${userIp}&uid=${userUid}`);
             let respostaAPI = await res.json(); 
 
@@ -457,7 +554,7 @@
         } finally {
             if (btnPronto) btnPronto.disabled = false;
             if (btnAcabou) btnAcabou.disabled = false;
-            loading.style.display = 'none';
+            ocultarCarregando();
         }
     }
 
